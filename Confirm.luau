@@ -18,7 +18,7 @@ local DEFAULT_CONFIG = {
 	CancelColor = Color3.fromRGB(231, 76, 60),
 	BoxColor = Color3.fromRGB(44, 47, 51),
 	TextColor = Color3.fromRGB(255, 255, 255),
-	BlurTransparency = 0.3
+BlurTransparency = 0.3
 }
 
 local function createUI(config)
@@ -28,17 +28,9 @@ local function createUI(config)
 	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	ScreenGui.DisplayOrder = 999
 	
-	local Blur = Instance.new("Frame")
-	Blur.Name = "Blur"
-	Blur.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	Blur.BackgroundTransparency = 1
-	Blur.BorderSizePixel = 0
-	Blur.Size = UDim2.fromScale(1, 1)
-	Blur.Parent = ScreenGui
-	
 	local Container = Instance.new("Frame")
 	Container.Name = "Container"
-	Container.Size = UDim2.fromOffset(400, 220)
+	Container.Size = UDim2.fromOffset(320, 176)
 	Container.Position = UDim2.fromScale(0.5, 0.5)
 	Container.AnchorPoint = Vector2.new(0.5, 0.5)
 	Container.BackgroundColor3 = config.BoxColor
@@ -142,7 +134,6 @@ local function createUI(config)
 	ConfirmCorner.Parent = ConfirmButton
 	
 	return ScreenGui, {
-		Blur = Blur,
 		Container = Container,
 		Title = Title,
 		Message = Message,
@@ -154,13 +145,9 @@ end
 local function animateIn(elements)
 	local tweenInfo = TweenInfo.new(ANIMATION_DURATION, EASE_STYLE, EASE_DIRECTION)
 	
-	TweenService:Create(elements.Blur, tweenInfo, {
-		BackgroundTransparency = 0.3
-	}):Play()
-	
-	elements.Container.Size = UDim2.fromOffset(380, 200)
+	elements.Container.Size = UDim2.fromOffset(304, 160)
 	TweenService:Create(elements.Container, tweenInfo, {
-		Size = UDim2.fromOffset(400, 220),
+		Size = UDim2.fromOffset(320, 176),
 		BackgroundTransparency = 0
 	}):Play()
 	
@@ -183,11 +170,10 @@ local function animateOut(elements, callback)
 	local tweenInfo = TweenInfo.new(ANIMATION_DURATION * 0.7, EASE_STYLE, Enum.EasingDirection.In)
 	
 	local tween = TweenService:Create(elements.Container, tweenInfo, {
-		Size = UDim2.fromOffset(380, 200),
+		Size = UDim2.fromOffset(304, 160),
 		BackgroundTransparency = 1
 	})
 	
-	TweenService:Create(elements.Blur, tweenInfo, {BackgroundTransparency = 1}):Play()
 	TweenService:Create(elements.Title, tweenInfo, {TextTransparency = 1}):Play()
 	TweenService:Create(elements.Message, tweenInfo, {TextTransparency = 1}):Play()
 	TweenService:Create(elements.ConfirmButton, tweenInfo, {
