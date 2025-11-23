@@ -108,18 +108,29 @@ local function mapAccessories(acc)
 end
 
 local function compareAccessories(acc1, acc2)
-    if #acc1 == 0 then return 0, 0 end
+    if #acc1 == 0 and #acc2 == 0 then return 0, 0 end
     
+    local map1 = mapAccessories(acc1)
     local map2 = mapAccessories(acc2)
     local match = 0
+    local allKeys = {}
     
-    for _, a1 in acc1 do
-        if map2[a1.mesh .. "|" .. a1.texture .. "|" .. a1.name] then
+    for _, a in acc1 do
+        allKeys[a.mesh .. "|" .. a.texture .. "|" .. a.name] = true
+    end
+    for _, a in acc2 do
+        allKeys[a.mesh .. "|" .. a.texture .. "|" .. a.name] = true
+    end
+    
+    local total = 0
+    for key in allKeys do
+        total = total + 1
+        if map1[key] and map2[key] then
             match = match + 1
         end
     end
     
-    return match, #acc1
+    return match, total
 end
 
 local function compareColors(c1, c2)
