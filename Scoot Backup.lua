@@ -6212,7 +6212,7 @@ local Library do
         return SettingsPage
     end
 end
-
+--[[
 local Window = Library:Window({
     Logo = "77218680285262",
     FadeTime = 0.3,
@@ -6536,6 +6536,7 @@ do
 end
 
 Library:Notification("Loaded!", "Menu took "..string.format("%.4f", os.clock() - LoadTick).." seconds to load", 5)
-
+]]
 getgenv().Library = Library
+
 return Library
