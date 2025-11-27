@@ -1,150 +1,137 @@
 local RunService = game:GetService("RunService")
 
-local FLAG = "BETTER_DRAWING"
-local DrawingObjects = {}
-
-local BetterDrawing = {
-    FLAG = FLAG,
-    _active = false,
-    _callback = nil
-}
+local BetterDrawing = { FLAG = "BETTER_DRAWING" }
 
 local Drawing = getgenv().Drawing
 local hookfunction = getgenv().hookfunction
 
-if not (hookfunction and Drawing) then
-    warn("[BetterDrawing] Missing required functions: hookfunction or Drawing")
+if not (Drawing and hookfunction) then
+    warn("[BetterDrawing] Drawing or hookfunction not available")
+    BetterDrawing.new = Drawing and Drawing.new or nil
     return BetterDrawing
 end
 
-local cleardrawcache = getgenv().cleardrawcache or (function()
-    local OriginalNew = hookfunction(Drawing.new, function(Type, PotentialFlag)
-        local Object = OriginalNew(Type)
-        
-        if PotentialFlag == FLAG then
-            table.insert(DrawingObjects, Object)
-        end
-        
-        return Object
-    end)
-    
-    return function()
-        for i = #DrawingObjects, 1, -1 do
-            local Object = DrawingObjects[i]
-            if Object then
-                pcall(function() Object:Destroy() end)
-            end
-            DrawingObjects[i] = nil
-        end
-    end
-end)()
+local TrackedObjects = {}
 
-local Tween = {}
+local OriginalDrawingNew = hookfunction(Drawing.new, function(Type, FlagArg)
+    local Object = OriginalDrawingNew(Type)
 
-local Lerp = {
-    Number = function(Start, End, Alpha)
-        return Start + (End - Start) * Alpha
-    end,
-    
-    Vector2 = function(Start, End, Alpha)
-        return Vector2.new(
-            Start.X + (End.X - Start.X) * Alpha,
-            Start.Y + (End.Y - Start.Y) * Alpha
-        )
-    end,
-    
-    Color3 = function(Start, End, Alpha)
-        return Color3.new(
-            Start.R + (End.R - Start.R) * Alpha,
-            Start.G + (End.G - Start.G) * Alpha,
-            Start.B + (End.B - Start.B) * Alpha
-        )
+    if FlagArg == BetterDrawing.FLAG then
+        table.insert(TrackedObjects, Object)
     end
+
+    return Object
+end)
+
+function BetterDrawing.new(Type: string)
+    return Drawing.new(Type, BetterDrawing.FLAG)
+end
+
+local function ClearTracked()
+    for _, Object in TrackedObjects do
+        pcall(function() Object:Remove() end)  -- most exploits use :Remove(), change to :Destroy() if yours uses that
+    end
+    table.clear(TrackedObjects)
+end
+
+local ActiveTweens = {}
+
+local Easings = {
+    Linear = function(t) return t end,
+    InSine = function(t) return 1 - math.cos((t * math.pi) / 2) end,
+    OutSine = function(t) return math.sin((t * math.pi) / 2) end,
+    InOutSine = function(t) return -(math.cos(math.pi * t) - 1) / 2 end,
+    InCubic = function(t) return t * t * t end,
+    OutCubic = function(t) return 1 - (1 - t) ^ 3 end,
+    InOutCubic = function(t)
+        if t < 0.5 then
+            return 4 * t * t * t
+        else
+            return 1 - math.pow(-2 * t + 2, 3) / 2
+        end
+    end,
+    InQuad = function(t) return t * t end,
+    OutQuad = function(t) return t * (2 - t) end,
+    InOutQuad = function(t)
+        if t < 0.5 then return 2 * t * t end
+        return 1 - (-2 * t + 2) ^ 2 / 2
+    end,
 }
 
-function Tween:Cubic(T)
-    if T < 0.5 then
-        return 4 * T * T * T
+BetterDrawing.Easings = Easings
+
+local function Interpolate(start, goal, alpha)
+    local ty = typeof(start)
+    if ty == "Color3" then
+        return start:Lerp(goal, alpha)
+    elseif ty == "number" or ty == "Vector2" or ty == "Vector3" or ty == "UDim2" then
+        return start + (goal - start) * alpha
     else
-        local F = (2 * T) - 2
-        return 0.5 * F * F * F + 1
+        return alpha >= 1 and goal or start
     end
 end
 
-function Tween:SetValue(DrawingObject, Property, Destination, Duration)
-    local Start = DrawingObject[Property]
-    if not Start then
-        warn("[BetterDrawing] Property '" .. Property .. "' not found on Drawing object")
-        return
-    end
-    
-    local StartTime = os.clock()
-    local Type = typeof(Destination)
-    local LerpFunc = Lerp[Type] or Lerp.Number
-    
-    local Connection
-    Connection = RunService.PreSimulation:Connect(function()
-        local Elapsed = os.clock() - StartTime
-        local Progress = math.min(Elapsed / Duration, 1)
-        local Alpha = self:Cubic(Progress)
-        
-        DrawingObject[Property] = LerpFunc(Start, Destination, Alpha)
-        
-        if Progress >= 1 then
-            Connection:Disconnect()
-            DrawingObject[Property] = Destination
+local function UpdateTweens()
+    local time = tick()
+
+    for i = #ActiveTweens, 1, -1 do
+        local tween = ActiveTweens[i]
+        local elapsed = time - tween.StartTime
+        local progress = elapsed / tween.Duration
+
+        if progress >= 1 then
+            for prop, data in tween.Props do
+                tween.Object[prop] = data.Dest
+            end
+            table.remove(ActiveTweens, i)
+        else
+            local alpha = tween.Easing(math.clamp(progress, 0, 1))
+            for prop, data in tween.Props do
+                tween.Object[prop] = Interpolate(data.Start, data.Dest, alpha)
+            end
         end
-    end)
-    
-    return Connection
+    end
 end
 
-BetterDrawing.Tween = Tween
+function BetterDrawing.Tween(Object, Properties, Duration: number, Easing: any?)
+    local easingFunc = (typeof(Easing) == "string" and Easings[Easing]) or Easing or Easings.InOutCubic
 
-function BetterDrawing:Init(UpdateCallback)
-    if self._active then
-        warn("[BetterDrawing] Already initialized. Call :Stop() first.")
-        return
-    end
-    
-    if not UpdateCallback or type(UpdateCallback) ~= "function" then
-        warn("[BetterDrawing] UpdateCallback must be a function")
-        return
-    end
-    
-    self._callback = UpdateCallback
-    self._active = true
-    
-    RunService:BindToRenderStep("BetterDrawing", Enum.RenderPriority.Camera.Value + 1, function(DeltaTime)
-        if not self._active then return end
-        
-        local success, err = pcall(function()
-            cleardrawcache()
-            self._callback(DeltaTime)
-        end)
-        
-        if not success then
-            warn("[BetterDrawing] Error in update callback:", err)
+    local tween = {
+        Object = Object,
+        StartTime = tick(),
+        Duration = Duration,
+        Easing = easingFunc,
+        Props = {},
+    }
+
+    for Property, Goal in Properties do
+        local Start = Object[Property]
+        if Start ~= nil then
+            tween.Props[Property] = {Start = Start, Dest = Goal}
         end
+    end
+
+    if next(tween.Props) then
+        table.insert(ActiveTweens, tween)
+    end
+end
+
+local RenderStepName = "BetterDrawing_Render"
+
+function BetterDrawing:Init(UpdateFunction)
+    RunService:UnbindFromRenderStep(RenderStepName)
+
+    RunService:BindToRenderStep(RenderStepName, 2000, function(deltaTime)
+        ClearTracked()
+        UpdateTweens()
+        UpdateFunction(deltaTime)
     end)
-    
-    return true
 end
 
 function BetterDrawing:Stop()
-    RunService:UnbindFromRenderStep("BetterDrawing")
-    
-    cleardrawcache()
-    self._active = false
-    self._callback = nil
-end
-
-function BetterDrawing:IsActive()
-    return self._active
-end
-
-function BetterDrawing:GetDrawingCount()
-    return #DrawingObjects
+    RunService:UnbindFromRenderStep(RenderStepName)
+    ClearTracked()
+    table.clear(ActiveTweens)
 end
 
 return BetterDrawing
