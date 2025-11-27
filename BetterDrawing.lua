@@ -56,20 +56,13 @@ do
         Tween.LinearInterpolation = LinearInterpolation;
     end
     
-    local RenderStepName = "BetterDrawing_Render"
-
     function BetterDrawing:Init(Connection)
         local RenderStepped = RunService.RenderStepped;
 
-        return RunService:BindToRenderStep(RenderStepName, 2000, function()
+        return RunService:BindToRenderStep("BetterDrawing_Render", 2000, function()
             cleardrawcache();
             Connection(DeltaTime);
         end)
-    end
-    
-    function BetterDrawing:Stop()
-        RunService:UnbindFromRenderStep(RenderStepName)
-        cleardrawcache()
     end
 
     function Tween:SetValue(DrawingObject, Property, Destination, Time)
@@ -94,6 +87,11 @@ do
     end
 
     BetterDrawing.Tween = Tween;
+end
+
+function BetterDrawing:Stop()
+    RunService:UnbindFromRenderStep("BetterDrawing_Render")
+    ClearTracked()
 end
 
 return BetterDrawing;
