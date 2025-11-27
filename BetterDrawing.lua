@@ -28,11 +28,7 @@ end
 
 local function ClearTracked()
     for _, Object in TrackedObjects do
-        if Object then
-        local removeMethod = Object.Remove or Object.Destroy
-        if removeMethod then
-            pcall(removeMethod, Object)
-        end
+        pcall(Object.Remove or Object.Destroy or function() end, Object)
     end
     table.clear(TrackedObjects)
 end
