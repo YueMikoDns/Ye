@@ -1,138 +1,96 @@
-local RunService = game:GetService("RunService")
+local RunService = game:GetService("RunService");
 
-local BetterDrawing = { FLAG = "BETTER_DRAWING" }
+local Flag = "BETTER_DRAWING";
 
-local Drawing = getgenv().Drawing
-local hookfunction = getgenv().hookfunction
+local DrawingObjects = { };
+local BetterDrawing = { FLAG = Flag };
 
-if not (Drawing and hookfunction) then return end
+local Drawing = getgenv().Drawing;
+local HookFunction = getgenv().hookfunction;
 
-local TrackedObjects = {}
-local RealDrawingNew = Drawing.new
-
-hookfunction(Drawing.new, function(Type, FlagArg)
-    if FlagArg == "BETTER_DRAWING" then
-        local Object = RealDrawingNew(Type)
-        table.insert(TrackedObjects, Object)
-        return Object
-    end
-
-    return RealDrawingNew(Type)
-end)
-
-function BetterDrawing.new(Type: string)
-    return Drawing.new(Type, BetterDrawing.FLAG)
+if not (HookFunction or Drawing) then
+    return;
 end
 
-local function ClearTracked()
-    for _, Object in ipairs(TrackedObjects) do
-        pcall(function()
-            if Object.Remove then
-                Object:Remove()
-            elseif Object.Destroy then
-                Object:Destroy()
+local cleardrawcache = getgenv().cleardrawcache or (function()
+    local DrawingNew = nil; DrawingNew = hookfunction(Drawing.new, function(Type, PotentialFlag)
+        local Object = DrawingNew(Type);
+
+        if (PotentialFlag == Flag) then
+            table.insert(DrawingObjects, Object);
+        end
+
+        return Object;
+    end)
+
+    return function()
+        for _, Object in DrawingObjects do
+            Object:Destroy();
+        end
+
+        table.clear(DrawingObjects);
+    end
+end)();
+
+do
+    local Tween = { }; do
+        local LinearInterpolation = { }; do
+            function LinearInterpolation:Any(Start, Destination, Time)
+                return Start + (Destination - Start) * Time;
+            end
+
+            function LinearInterpolation:Vector2(Start, Destination, Time)
+                return Vector2.new(self:Any(Start.X, Destination.X, Time), self:Any(Start.Y, Destination.Y, Time));
+            end
+        end
+
+        function Tween:Cubic(T)
+            if (T < 0.5) then
+                return 4 * T * T * T;
+            else
+                local F = (2 * T) - 2;
+                return 0.5 * F * F * F + 1;
+            end
+        end
+
+        Tween.LinearInterpolation = LinearInterpolation;
+    end
+
+    function BetterDrawing:Init(Connection)
+        local RenderStepped = RunService.RenderStepped;
+
+        return RunService:BindToRenderStep("BetterDrawing", 2000, function()
+            cleardrawcache();
+            Connection(DeltaTime);
+        end)
+    end
+
+    function Tween:SetValue(DrawingObject, Property, Destination, Time)
+        local Start = DrawingObject[Property];
+
+        if (not Start) then
+            return;
+        end
+        
+        local StartTime = tick();
+        local Class = typeof(Destination);
+        
+        local Connection, LinearInterpolation = nil, self.LinearInterpolation; Connection = RunService.PreSimulation:Connect(function()
+            local Progress = (tick() - StartTime) / Time;
+            DrawingObject[Property] = (LinearInterpolation[Class] or LinearInterpolation.Any)(LinearInterpolation, Start, Destination, self:Cubic(Progress));
+
+            if (Progress >= 1) then
+                Connection:Disconnect();
+                DrawingObject[Property] = Destination;
             end
         end)
     end
-    table.clear(TrackedObjects)
+
+    BetterDrawing.Tween = Tween;
 end
 
-local ActiveTweens = {}
-
-local Easings = {
-    Linear = function(t) return t end,
-    InSine = function(t) return 1 - math.cos((t * math.pi) / 2) end,
-    OutSine = function(t) return math.sin((t * math.pi) / 2) end,
-    InOutSine = function(t) return -(math.cos(math.pi * t) - 1) / 2 end,
-    InCubic = function(t) return t * t * t end,
-    OutCubic = function(t) return 1 - (1 - t) ^ 3 end,
-    InOutCubic = function(t)
-        return t < 0.5 and 4 * t * t * t or 1 - math.pow(-2 * t + 2, 3) / 2
-    end,
-    InQuad = function(t) return t * t end,
-    OutQuad = function(t) return t * (2 - t) end,
-    InOutQuad = function(t)
-        return t < 0.5 and 2 * t * t or 1 - (-2 * t + 2) ^ 2 / 2
-    end,
-}
-
-BetterDrawing.Easings = Easings
-
-local function Interpolate(start, goal, alpha)
-    local ty = typeof(start)
-    if ty == "Color3" then
-        return start:Lerp(goal, alpha)
-    elseif ty == "number" then
-        return start + (goal - start) * alpha
-    elseif ty == "Vector2" or ty == "Vector3" or ty == "UDim2" then
-        return start + (goal - start) * alpha
-    else
-        return alpha >= 1 and goal or start
-    end
+function BetterDrawing:RemoveAll()
+    cleardrawcache();
 end
 
-local function UpdateTweens()
-    local time = tick()
-
-    for i = #ActiveTweens, 1, -1 do
-        local tween = ActiveTweens[i]
-        local elapsed = time - tween.StartTime
-        local progress = math.clamp(elapsed / tween.Duration, 0, 1)
-
-        local alpha = tween.Easing(progress)
-
-        for prop, data in tween.Props do
-            tween.Object[prop] = Interpolate(data.Start, data.Dest, alpha)
-        end
-
-        if progress >= 1 then
-            for prop, data in tween.Props do
-                tween.Object[prop] = data.Dest
-            end
-            table.remove(ActiveTweens, i)
-        end
-    end
-end
-
-function BetterDrawing.Tween(Object, Properties, Duration: number, Easing: any?)
-    local easingFunc = (typeof(Easing) == "string" and Easings[Easing]) or Easing or Easings.InOutCubic
-
-    local tween = {
-        Object = Object,
-        StartTime = tick(),
-        Duration = Duration,
-        Easing = easingFunc,
-        Props = {},
-    }
-
-    for Property, Goal in Properties do
-        local Start = Object[Property]
-        if Start ~= nil then
-            tween.Props[Property] = {Start = Start, Dest = Goal}
-        end
-    end
-
-    if next(tween.Props) then
-        table.insert(ActiveTweens, tween)
-    end
-end
-
-local RenderStepName = "BetterDrawing_Render"
-
-function BetterDrawing:Init(UpdateFunction)
-    RunService:UnbindFromRenderStep(RenderStepName)
-
-    RunService:BindToRenderStep(RenderStepName, 2000, function(deltaTime)
-        UpdateTweens()
-        ClearTracked()
-        UpdateFunction(deltaTime)
-    end)
-end
-
-function BetterDrawing:Stop()
-    RunService:UnbindFromRenderStep(RenderStepName)
-    ClearTracked()
-    table.clear(ActiveTweens)
-end
-
-return BetterDrawing
+return BetterDrawing;
