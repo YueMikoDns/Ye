@@ -69,7 +69,7 @@ do
     
     function BetterDrawing:Stop()
         RunService:UnbindFromRenderStep(RenderStepName)
-        ClearTracked()
+        cleardrawcache()
     end
 
     function Tween:SetValue(DrawingObject, Property, Destination, Time)
