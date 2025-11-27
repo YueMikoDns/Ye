@@ -6,7 +6,7 @@ local DrawingObjects = {}
 local BetterDrawing = {
     FLAG = FLAG,
     _active = false,
-    _connection = nil
+    _callback = nil
 }
 
 local Drawing = getgenv().Drawing
@@ -112,29 +112,31 @@ function BetterDrawing:Init(UpdateCallback)
         return
     end
     
+    self._callback = UpdateCallback
     self._active = true
     
-    local LastTime = os.clock()
-    self._connection = RunService:BindToRenderStep("BetterDrawing", Enum.RenderPriority.Camera.Value + 1, function()
-        local CurrentTime = os.clock()
-        local DeltaTime = CurrentTime - LastTime
-        LastTime = CurrentTime
+    RunService:BindToRenderStep("BetterDrawing", Enum.RenderPriority.Camera.Value + 1, function(DeltaTime)
+        if not self._active then return end
         
-        cleardrawcache()
-        UpdateCallback(DeltaTime)
+        local success, err = pcall(function()
+            cleardrawcache()
+            self._callback(DeltaTime)
+        end)
+        
+        if not success then
+            warn("[BetterDrawing] Error in update callback:", err)
+        end
     end)
     
-    return self._connection
+    return true
 end
 
 function BetterDrawing:Stop()
-    if self._connection then
-        RunService:UnbindFromRenderStep("BetterDrawing")
-        self._connection = nil
-    end
+    RunService:UnbindFromRenderStep("BetterDrawing")
     
     cleardrawcache()
     self._active = false
+    self._callback = nil
 end
 
 function BetterDrawing:IsActive()
