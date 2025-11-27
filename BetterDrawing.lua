@@ -7,12 +7,11 @@ local hookfunction = getgenv().hookfunction
 
 if not (Drawing and hookfunction) then
     warn("[BetterDrawing] Drawing or hookfunction not available")
-    BetterDrawing.new = Drawing and Drawing.new or nil
+    BetterDrawing.new = Drawing and Drawing.new or function() end
     return BetterDrawing
 end
 
 local TrackedObjects = {}
-
 local OriginalDrawingNew = hookfunction(Drawing.new, function(Type, FlagArg)
     local Object = OriginalDrawingNew(Type)
 
@@ -29,7 +28,11 @@ end
 
 local function ClearTracked()
     for _, Object in TrackedObjects do
-        pcall(function() Object:Remove() end)  -- most exploits use :Remove(), change to :Destroy() if yours uses that
+        if Object then
+        local removeMethod = Object.Remove or Object.Destroy
+        if removeMethod then
+            pcall(removeMethod, Object)
+        end
     end
     table.clear(TrackedObjects)
 end
@@ -44,17 +47,12 @@ local Easings = {
     InCubic = function(t) return t * t * t end,
     OutCubic = function(t) return 1 - (1 - t) ^ 3 end,
     InOutCubic = function(t)
-        if t < 0.5 then
-            return 4 * t * t * t
-        else
-            return 1 - math.pow(-2 * t + 2, 3) / 2
-        end
+        return t < 0.5 and 4 * t * t * t or 1 - math.pow(-2 * t + 2, 3) / 2
     end,
     InQuad = function(t) return t * t end,
     OutQuad = function(t) return t * (2 - t) end,
     InOutQuad = function(t)
-        if t < 0.5 then return 2 * t * t end
-        return 1 - (-2 * t + 2) ^ 2 / 2
+        return t < 0.5 and 2 * t * t or 1 - (-2 * t + 2) ^ 2 / 2
     end,
 }
 
@@ -64,7 +62,9 @@ local function Interpolate(start, goal, alpha)
     local ty = typeof(start)
     if ty == "Color3" then
         return start:Lerp(goal, alpha)
-    elseif ty == "number" or ty == "Vector2" or ty == "Vector3" or ty == "UDim2" then
+    elseif ty == "number" then
+        return start + (goal - start) * alpha
+    elseif ty == "Vector2" or ty == "Vector3" or ty == "UDim2" then
         return start + (goal - start) * alpha
     else
         return alpha >= 1 and goal or start
@@ -77,18 +77,19 @@ local function UpdateTweens()
     for i = #ActiveTweens, 1, -1 do
         local tween = ActiveTweens[i]
         local elapsed = time - tween.StartTime
-        local progress = elapsed / tween.Duration
+        local progress = math.clamp(elapsed / tween.Duration, 0, 0, 1)
+
+        local alpha = tween.Easing(progress)
+
+        for prop, data in tween.Props do
+            tween.Object[prop] = Interpolate(data.Start, data.Dest, alpha)
+        end
 
         if progress >= 1 then
             for prop, data in tween.Props do
                 tween.Object[prop] = data.Dest
             end
             table.remove(ActiveTweens, i)
-        else
-            local alpha = tween.Easing(math.clamp(progress, 0, 1))
-            for prop, data in tween.Props do
-                tween.Object[prop] = Interpolate(data.Start, data.Dest, alpha)
-            end
         end
     end
 end
@@ -122,8 +123,9 @@ function BetterDrawing:Init(UpdateFunction)
     RunService:UnbindFromRenderStep(RenderStepName)
 
     RunService:BindToRenderStep(RenderStepName, 2000, function(deltaTime)
-        ClearTracked()
         UpdateTweens()
+        ClearTracked()
+        table.clear(ActiveTweens)
         UpdateFunction(deltaTime)
     end)
 end
