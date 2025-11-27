@@ -91,7 +91,7 @@ end
 
 function BetterDrawing:Stop()
     RunService:UnbindFromRenderStep("BetterDrawing_Render")
-    ClearTracked()
+    cleardrawcache()
 end
 
 return BetterDrawing;
