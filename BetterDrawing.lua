@@ -113,7 +113,13 @@ function BetterDrawing:Init(UpdateCallback)
     end
     
     self._active = true
-    self._connection = RunService:BindToRenderStep("BetterDrawing", Enum.RenderPriority.Camera.Value + 1, function(DeltaTime)
+    
+    local LastTime = os.clock()
+    self._connection = RunService:BindToRenderStep("BetterDrawing", Enum.RenderPriority.Camera.Value + 1, function()
+        local CurrentTime = os.clock()
+        local DeltaTime = CurrentTime - LastTime
+        LastTime = CurrentTime
+        
         cleardrawcache()
         UpdateCallback(DeltaTime)
     end)
