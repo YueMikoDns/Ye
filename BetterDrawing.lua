@@ -5,21 +5,19 @@ local BetterDrawing = { FLAG = "BETTER_DRAWING" }
 local Drawing = getgenv().Drawing
 local hookfunction = getgenv().hookfunction
 
-if not (Drawing and hookfunction) then
-    warn("[BetterDrawing] Drawing or hookfunction not available")
-    BetterDrawing.new = Drawing and Drawing.new or function() end
-    return BetterDrawing
-end
+if not (Drawing and hookfunction) then return end
 
 local TrackedObjects = {}
-
 local RealDrawingNew = Drawing.new
-local OriginalDrawingNew = hookfunction(Drawing.new, function(Type, FlagArg)
-    local Object = RealDrawingNew(Type)
-    if FlagArg == BetterDrawing.FLAG then
+
+hookfunction(Drawing.new, function(Type, FlagArg)
+    if FlagArg == "BETTER_DRAWING" then
+        local Object = RealDrawingNew(Type)
         table.insert(TrackedObjects, Object)
+        return Object
     end
-    return Object
+
+    return RealDrawingNew(Type)
 end)
 
 function BetterDrawing.new(Type: string)
