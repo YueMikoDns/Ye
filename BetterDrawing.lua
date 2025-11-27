@@ -12,13 +12,13 @@ if not (Drawing and hookfunction) then
 end
 
 local TrackedObjects = {}
-local OriginalDrawingNew = hookfunction(Drawing.new, function(Type, FlagArg)
-    local Object = OriginalDrawingNew(Type)
 
+local RealDrawingNew = Drawing.new
+local OriginalDrawingNew = hookfunction(Drawing.new, function(Type, FlagArg)
+    local Object = RealDrawingNew(Type)
     if FlagArg == BetterDrawing.FLAG then
         table.insert(TrackedObjects, Object)
     end
-
     return Object
 end)
 
@@ -27,8 +27,14 @@ function BetterDrawing.new(Type: string)
 end
 
 local function ClearTracked()
-    for _, Object in TrackedObjects do
-        pcall(Object.Remove or Object.Destroy or function() end, Object)
+    for _, Object in ipairs(TrackedObjects) do
+        pcall(function()
+            if Object.Remove then
+                Object:Remove()
+            elseif Object.Destroy then
+                Object:Destroy()
+            end
+        end)
     end
     table.clear(TrackedObjects)
 end
@@ -73,7 +79,7 @@ local function UpdateTweens()
     for i = #ActiveTweens, 1, -1 do
         local tween = ActiveTweens[i]
         local elapsed = time - tween.StartTime
-        local progress = math.clamp(elapsed / tween.Duration, 0, 0, 1)
+        local progress = math.clamp(elapsed / tween.Duration, 0, 1)
 
         local alpha = tween.Easing(progress)
 
@@ -121,7 +127,6 @@ function BetterDrawing:Init(UpdateFunction)
     RunService:BindToRenderStep(RenderStepName, 2000, function(deltaTime)
         UpdateTweens()
         ClearTracked()
-        table.clear(ActiveTweens)
         UpdateFunction(deltaTime)
     end)
 end
